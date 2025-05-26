@@ -1,0 +1,552 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Challenge Customizer</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400&display=swap');
+
+        body {
+            font-family: 'Orbitron', sans-serif;
+            background-color: #1a2a2a;
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: #2a3a3a;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            width: 600px;
+            text-align: center;
+        }
+        h1 {
+            color: #f5a623;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+        .section {
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+            position: relative;
+            padding: 10px;
+            border-radius: 8px;
+            background: radial-gradient(circle, rgba(245, 166, 35, 0.1) 0%, rgba(245, 166, 35, 0) 70%);
+        }
+        .section-label {
+            writing-mode: vertical-lr;
+            transform: rotate(180deg);
+            color: #f5a623;
+            font-size: 14px;
+            margin-right: 20px;
+            text-transform: uppercase;
+        }
+        .section-content {
+            flex-grow: 1;
+            text-align: left;
+        }
+        .section-content h3 {
+            color: #f5a623;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            font-size: 16px;
+            text-shadow: 0 0 5px rgba(245, 166, 35, 0.5);
+        }
+        .button-group {
+            display: flex;
+            justify-content: flex-start;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .button {
+            background: linear-gradient(45deg, #3a4a4a, #4a5a5a);
+            border: 2px solid #f5a623;
+            color: #ffffff;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            text-transform: uppercase;
+            transition: transform 0.2s, box-shadow 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        .button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(245, 166, 35, 0.3), transparent);
+            transition: left 0.5s;
+        }
+        .button:hover::before {
+            left: 100%;
+        }
+        .button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(245, 166, 35, 0.7);
+        }
+        .button.selected {
+            background: linear-gradient(45deg, #f5a623, #d4891e);
+            color: #1a2a2a;
+            box-shadow: 0 0 10px rgba(245, 166, 35, 0.5);
+        }
+        #show-details {
+            margin-top: 20px;
+            background: linear-gradient(45deg, #f5a623, #d4891e);
+            border: none;
+            color: #1a2a2a;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            text-transform: uppercase;
+            transition: transform 0.2s;
+        }
+        #show-details:hover {
+            transform: scale(1.05);
+        }
+        #show-details:disabled {
+            background: #3a4a4a;
+            color: #ffffff;
+            cursor: not-allowed;
+        }
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .popup {
+            background-color: #2a3a3a;
+            padding: 20px;
+            border-radius: 10px;
+            width: 800px;
+            max-width: 90%;
+            position: relative;
+            box-shadow: 0 0 20px rgba(245, 166, 35, 0.3);
+            box-sizing: border-box;
+        }
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: #f5a623;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        .popup-content {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+        }
+        .phases-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            width: 100%;
+        }
+        .phase {
+            flex: 1;
+            background-color: #1a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: left;
+            box-sizing: border-box;
+        }
+        .cost-section {
+            background-color: #1a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            width: calc(100% - 40px); /* Subtract padding of .popup (20px on each side) */
+            margin: 0 auto;
+            border: 1px solid #f5a623;
+            box-shadow: 0 0 10px rgba(245, 166, 35, 0.2);
+            box-sizing: border-box;
+        }
+        .phase h3, .cost-section h3 {
+            font-family: 'Orbitron', sans-serif;
+            color: #f5a623;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-transform: uppercase;
+            text-shadow: 0 0 3px rgba(245, 166, 35, 0.7);
+        }
+        .phase h3::before, .cost-section h3::before {
+            content: '✔';
+            color: #00ff00;
+            font-size: 20px;
+        }
+        .phase p {
+            font-family: 'Roboto', sans-serif;
+            margin: 5px 0;
+            font-size: 14px;
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+        .cost-section p {
+            font-family: 'Orbitron', sans-serif;
+            margin: 5px 0;
+            font-size: 24px;
+            color: #ffb84d;
+            line-height: 1.6;
+            text-shadow: 0 0 5px rgba(245, 166, 35, 0.5);
+        }
+        .phase ul {
+            font-family: 'Roboto', sans-serif;
+            list-style: none;
+            padding: 0;
+            margin: 10px 0 0 0;
+        }
+        .phase li {
+            margin: 5px 0;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: #e0e0e0;
+        }
+        .phase li::before {
+            content: '★';
+            color: #f5a623;
+            font-size: 12px;
+        }
+        .phase li.warning::before {
+            content: '⚠';
+            color: #ff0000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>The accounts our firm offers</h1>
+
+        <div class="section">
+            <div class="section-label">Phases</div>
+            <div class="section-content">
+                <h3>Challenge Phases</h3>
+                <div class="button-group" id="phases">
+                    <button class="button" onclick="selectOption('phases', '2 Step')">2 Step</button>
+                    <button class="button" onclick="selectOption('phases', '3 Step')">3 Step</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-label">Program</div>
+            <div class="section-content">
+                <h3>Account Types</h3>
+                <div class="button-group" id="account-types">
+                    <button class="button" onclick="selectOption('account-types', 'Beginner')">Beginner</button>
+                    <button class="button" onclick="selectOption('account-types', 'Advanced')">Advanced</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-label">Account Balance</div>
+            <div class="section-content">
+                <h3>Balance Selection</h3>
+                <div class="button-group" id="balance">
+                    <button class="button" onclick="selectOption('balance', '10,000')">10,000</button>
+                    <button class="button" onclick="selectOption('balance', '25,000')">25,000</button>
+                    <button class="button" onclick="selectOption('balance', '50,000')">50,000</button>
+                    <button class="button" onclick="selectOption('balance', '100,000')">100,000</button>
+                    <button class="button" onclick="selectOption('balance', '150,000')">150,000</button>
+                </div>
+            </div>
+        </div>
+
+        <button id="show-details" onclick="showPopup()" disabled>Show Details</button>
+    </div>
+
+    <div class="overlay" id="overlay">
+        <div class="popup">
+            <button class="close-btn" onclick="closePopup()">×</button>
+            <div class="popup-content" id="popup-content">
+                <!-- Pop-up content will be dynamically inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const selections = {
+            phases: '',
+            'account-types': '',
+            balance: ''
+        };
+
+        const challengeData = {
+            '2 Step': {
+                'Beginner': {
+                    '10,000': {
+                        dailyDrawdown: '5%',
+                        maxDrawdown: '10%',
+                        profitTarget1: '8%',
+                        profitTarget2: '5%',
+                        cost: '$150'
+                    },
+                    '25,000': {
+                        dailyDrawdown: '5%',
+                        maxDrawdown: '10%',
+                        profitTarget1: '8%',
+                        profitTarget2: '5%',
+                        cost: '$250'
+                    },
+                    '50,000': {
+                        dailyDrawdown: '5%',
+                        maxDrawdown: '10%',
+                        profitTarget1: '8%',
+                        profitTarget2: '5%',
+                        cost: '$350'
+                    },
+                    '100,000': {
+                        dailyDrawdown: '5%',
+                        maxDrawdown: '10%',
+                        profitTarget1: '8%',
+                        profitTarget2: '5%',
+                        cost: '$550'
+                    },
+                    '150,000': {
+                        dailyDrawdown: '5%',
+                        maxDrawdown: '10%',
+                        profitTarget1: '8%',
+                        profitTarget2: '5%',
+                        cost: '$850'
+                    }
+                },
+                'Advanced': {
+                    '10,000': { dailyDrawdown: 'Not available', maxDrawdown: '', profitTarget1: '', profitTarget2: '', cost: '' },
+                    '25,000': { dailyDrawdown: 'Not available', maxDrawdown: '', profitTarget1: '', profitTarget2: '', cost: '' },
+                    '50,000': { dailyDrawdown: 'Not available', maxDrawdown: '', profitTarget1: '', profitTarget2: '', cost: '' },
+                    '100,000': { dailyDrawdown: 'Not available', maxDrawdown: '', profitTarget1: '', profitTarget2: '', cost: '' },
+                    '150,000': { dailyDrawdown: 'Not available', maxDrawdown: '', profitTarget1: '', profitTarget2: '', cost: '' }
+                }
+            },
+            '3 Step': {
+                'Beginner': {
+                    '10,000': {
+                        dailyDrawdown: '5%',
+                        maxDrawdown: '10%',
+                        profitTarget1: '8%',
+                        profitTarget2: '5%',
+                        profitTarget3: '5%',
+                        cost: '$125'
+                    },
+                    '25,000': {
+                        dailyDrawdown: '5%',
+                        maxDrawdown: '10%',
+                        profitTarget1: '8%',
+                        profitTarget2: '5%',
+                        profitTarget3: '5%',
+                        cost: '$175'
+                    },
+                    '50,000': {
+                        dailyDrawdown: '5%',
+                        maxDrawdown: '10%',
+                        profitTarget1: '8%',
+                        profitTarget2: '5%',
+                        profitTarget3: '5%',
+                        cost: '$275'
+                    },
+                    '100,000': {
+                        dailyDrawdown: '5%',
+                        maxDrawdown: '10%',
+                        profitTarget1: '8%',
+                        profitTarget2: '5%',
+                        profitTarget3: '5%',
+                        cost: '$450'
+                    },
+                    '150,000': {
+                        dailyDrawdown: '5%',
+                        maxDrawdown: '10%',
+                        profitTarget1: '8%',
+                        profitTarget2: '5%',
+                        profitTarget3: '5%',
+                        cost: '$650'
+                    }
+                },
+                'Advanced': {
+                    '10,000': { dailyDrawdown: 'Not available', maxDrawdown: '', profitTarget1: '', profitTarget2: '', profitTarget3: '', cost: '' },
+                    '25,000': { dailyDrawdown: 'Not available', maxDrawdown: '', profitTarget1: '', profitTarget2: '', profitTarget3: '', cost: '' },
+                    '50,000': { dailyDrawdown: 'Not available', maxDrawdown: '', profitTarget1: '', profitTarget2: '', profitTarget3: '', cost: '' },
+                    '100,000': { dailyDrawdown: 'Not available', maxDrawdown: '', profitTarget1: '', profitTarget2: '', profitTarget3: '', cost: '' },
+                    '150,000': { dailyDrawdown: 'Not available', maxDrawdown: '', profitTarget1: '', profitTarget2: '', profitTarget3: '', cost: '' }
+                }
+            }
+        };
+
+        function selectOption(category, value) {
+            selections[category] = value;
+
+            // Update button styles
+            const buttons = document.querySelectorAll(`#${category} .button`);
+            buttons.forEach(button => {
+                button.classList.remove('selected');
+                if (button.textContent === value) {
+                    button.classList.add('selected');
+                }
+            });
+
+            // Check if all selections are made and enable/disable the button
+            const allSelected = selections.phases && selections['account-types'] && selections.balance;
+            document.getElementById('show-details').disabled = !allSelected;
+
+            // Automatically show popup if all selections are made
+            if (allSelected) {
+                showPopup();
+            }
+        }
+
+        function showPopup() {
+            if (!selections.phases || !selections['account-types'] || !selections.balance) {
+                return;
+            }
+
+            const data = challengeData[selections.phases][selections['account-types']][selections.balance];
+            if (data.dailyDrawdown === 'Not available') {
+                document.getElementById('popup-content').innerHTML = `
+                    <div class="phase">
+                        <h3>Not Available</h3>
+                        <p>This combination is not available.</p>
+                    </div>
+                `;
+            } else if (selections.phases === '2 Step') {
+                document.getElementById('popup-content').innerHTML = `
+                    <div class="phases-row">
+                        <div class="phase">
+                            <h3>1 Funded Challenge</h3>
+                            <ul>
+                                <li>Profit Target: ${data.profitTarget1}</li>
+                                <li class="warning">Daily Sim Loss: ${data.dailyDrawdown}</li>
+                                <li class="warning">Overall Sim Loss: ${data.maxDrawdown}</li>
+                                <li class="warning">Minimum Profitable Days: 3 days</li>
+                                <li>Trading Period: Unlimited</li>
+                            </ul>
+                        </div>
+                        <div class="phase">
+                            <h3>2 Verification</h3>
+                            <ul>
+                                <li>Profit Target: ${data.profitTarget2}</li>
+                                <li class="warning">Daily Sim Loss: ${data.dailyDrawdown}</li>
+                                <li class="warning">Overall Sim Loss: ${data.maxDrawdown}</li>
+                                <li class="warning">Minimum Profitable Days: 3 days</li>
+                                <li>Trading Period: Unlimited</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="cost-section">
+                        <h3>Challenge Fee</h3>
+                        <p>${data.cost}</p>
+                    </div>
+                `;
+            } else if (selections.phases === '3 Step') {
+                document.getElementById('popup-content').innerHTML = `
+                    <div class="phases-row">
+                        <div class="phase">
+                            <h3>1 Funded Challenge</h3>
+                            <ul>
+                                <li>Profit Target: ${data.profitTarget1}</li>
+                                <li class="warning">Daily Sim Loss: ${data.dailyDrawdown}</li>
+                                <li class="warning">Overall Sim Loss: ${data.maxDrawdown}</li>
+                                <li class="warning">Minimum Profitable Days: 3 days</li>
+                                <li>Trading Period: Unlimited</li>
+                            </ul>
+                        </div>
+                        <div class="phase">
+                            <h3>2 Verification</h3>
+                            <ul>
+                                <li>Profit Target: ${data.profitTarget2}</li>
+                                <li class="warning">Daily Sim Loss: ${data.dailyDrawdown}</li>
+                                <li class="warning">Overall Sim Loss: ${data.maxDrawdown}</li>
+                                <li class="warning">Minimum Profitable Days: 3 days</li>
+                                <li>Trading Period: Unlimited</li>
+                            </ul>
+                        </div>
+                        <div class="phase">
+                            <h3>3 Confirmation</h3>
+                            <ul>
+                                <li>Profit Target: ${data.profitTarget3}</li>
+                                <li class="warning">Daily Sim Loss: ${data.dailyDrawdown}</li>
+                                <li class="warning">Overall Sim Loss: ${data.maxDrawdown}</li>
+                                <li class="warning">Minimum Profitable Days: 3 days</li>
+                                <li>Trading Period: Unlimited</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="cost-section">
+                        <h3>Challenge Fee</h3>
+                        <p>${data.cost}</p>
+                    </div>
+                `;
+            }
+
+            document.getElementById('overlay').style.display = 'flex';
+        }
+
+        function closePopup() {
+            document.getElementById('overlay').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
